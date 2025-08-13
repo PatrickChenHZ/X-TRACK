@@ -2,6 +2,10 @@
 #include "Wire.h"
 #include <math.h>
 
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
 //Register map
 #define FUNC_CFG_ACCESS         0x01
 #define SENSOR_SYNC_TIME_FRAME  0x04
@@ -136,7 +140,8 @@
 #define GYR_ODR_833_HZ          (0x07 << 4)
 #define GYR_ODR_1_66_KHZ        (0x08 << 4)
 #define GYR_ODR_3_33_KHZ        (0x09 << 4)
-#define GYR_ODR_6_66_KHZ        (0x01 << 4)
+//#define GYR_ODR_6_66_KHZ        (0x01 << 4)
+#define GYR_ODR_6_66_KHZ        (0x0a << 4)
 #define GYR_SCALE_250_DPS       (0x00 << 2)
 #define GYR_SCALE_500_DPS       (0x01 << 2)
 #define GYR_SCALE_1000_DPS      (0x02 << 2)
@@ -148,9 +153,12 @@ bool LSM6DSM::Init(uint8_t addr)
 
     SoftReset();
     delay(50);
+	
+		SetRegisterBits(CTRL3_C, 0x04, true);   // IF_INC=1
 
     ConfigAcc(ACC_ODR_52_HZ, ACC_SCALE_4_G);
-    ConfigGyr(GYR_POWER_DOWN, GYR_SCALE_500_DPS);
+    //ConfigGyr(GYR_POWER_DOWN, GYR_SCALE_500_DPS);
+		ConfigGyr(GYR_ODR_52_HZ, GYR_SCALE_500_DPS);
     //LSM6DSMSetScale(ACC_SCALE_4_G, GYR_SCALE_500_DPS);
     //LSM6DSMSetODR(ACC_ODR_416_HZ, GYR_POWER_DOWN);
     //SetRegisterBits(CTRL3_C, 0x20, true);    //interrupt output pads active low
@@ -164,7 +172,7 @@ bool LSM6DSM::Init(uint8_t addr)
 
 bool LSM6DSM::IsConnected()
 {
-    return (ReadReg(WHO_AM_I) == 0x6A);
+    return (ReadReg(WHO_AM_I) == 0x69);
 }
 
 void LSM6DSM::ConfigAcc(uint8_t acc_odr, uint8_t acc_scale)
@@ -267,7 +275,7 @@ void LSM6DSM::DisableTapDetection(void)
 void LSM6DSM::EnablePedometer(uint16_t debounce_time, uint8_t debounce_step)
 {
     WriteReg(FUNC_CFG_ACCESS, 0x80);                            // Enable access to embedded functions registers (bank A)
-    WriteReg(CONFIG_PEDO_THS_MIN, 0x8e);                    // PEDO_FS = ¡À4 g and configure pedometer minimum threshold value
+    WriteReg(CONFIG_PEDO_THS_MIN, 0x8e);                    // PEDO_FS = Â¡Ã€4 g and configure pedometer minimum threshold value
     WriteReg(PEDO_DEB_REG, ((uint8_t)(debounce_time / 80) << 3) | (debounce_step & 0x07));
     WriteReg(FUNC_CFG_ACCESS, 0x00);                            // Disable access to embedded functions registers (bank A)
     SetRegisterBits(CTRL10_C, 0x10, true);                     // Enable embedded functions and pedometer algorithm
@@ -302,32 +310,58 @@ void LSM6DSM::WriteReg(uint8_t reg, uint8_t data)
     Wire.endTransmission();
 }
 
+//uint8_t LSM6DSM::ReadReg(uint8_t reg)
+//{
+//    Wire.beginTransmission(Address);
+//    Wire.write(reg);
+//    Wire.endTransmission();
+//
+//    Wire.requestFrom(Address, 1);
+//    uint8_t data = Wire.read();
+//    Wire.endTransmission();
+//
+//    return data;
+//}
+
+//void LSM6DSM::ReadRegs(uint8_t reg, uint8_t* buf, uint16_t len)
+//{
+//    Wire.beginTransmission(Address);
+//    Wire.write(reg);
+//    Wire.endTransmission();
+//
+//    Wire.requestFrom(Address, len);
+//    for(int i = 0; i < len; i++)
+//    {
+//        buf[i] = Wire.read();
+//    }
+//    Wire.endTransmission();
+//}
+
 uint8_t LSM6DSM::ReadReg(uint8_t reg)
 {
     Wire.beginTransmission(Address);
     Wire.write(reg);
-    Wire.endTransmission();
-
-    Wire.requestFrom(Address, 1);
-    uint8_t data = Wire.read();
-    Wire.endTransmission();
-
-    return data;
+    Wire.endTransmission();                 // STOP
+    uint8_t n = Wire.requestFrom(Address, (uint8_t)1);
+    if (n != 1) { return 0; }               // or handle error
+    return Wire.read();
 }
 
 void LSM6DSM::ReadRegs(uint8_t reg, uint8_t* buf, uint16_t len)
 {
     Wire.beginTransmission(Address);
     Wire.write(reg);
-    Wire.endTransmission();
-
-    Wire.requestFrom(Address, len);
-    for(int i = 0; i < len; i++)
-    {
-        buf[i] = Wire.read();
+    Wire.endTransmission();                  // STOP
+    uint8_t n = Wire.requestFrom(Address, (uint8_t)len);
+    if (n != len) {                          // handle short read
+        // zero-fill
+        for (uint8_t i = 0; i < n; ++i) buf[i] = Wire.read();
+        for (uint16_t i = n; i < len; ++i) buf[i] = 0;
+        return;
     }
-    Wire.endTransmission();
+    for (uint16_t i = 0; i < len; i++) buf[i] = Wire.read();
 }
+
 
 void LSM6DSM::SetRegisterBits(uint8_t reg, uint8_t data, bool setBits)
 {

@@ -1,179 +1,184 @@
-#include "SystemInfos.h"
-#include "../App/Version.h"
+#include "SystemInfosModel.h"
+#include <stdio.h>
+#include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 
 using namespace Page;
 
-SystemInfos::SystemInfos()
+void SystemInfosModel::Init()
 {
+    account = new Account("SystemInfosModel", DataProc::Center(), 0, this);
+
+    account->Subscribe("SportStatus");
+    account->Subscribe("GPS");
+    account->Subscribe("MAG");
+    account->Subscribe("IMU");
+    account->Subscribe("Clock");
+    account->Subscribe("Power");
+    account->Subscribe("Storage");
+    account->Subscribe("StatusBar");
 }
 
-SystemInfos::~SystemInfos()
+void SystemInfosModel::Deinit()
 {
-
-}
-
-void SystemInfos::onCustomAttrConfig()
-{
-
-}
-
-void SystemInfos::onViewLoad()
-{
-    Model.Init();
-    View.Create(_root);
-    AttachEvent(_root);
-
-    SystemInfosView::item_t* item_grp = ((SystemInfosView::item_t*)&View.ui);
-
-    for (int i = 0; i < sizeof(View.ui) / sizeof(SystemInfosView::item_t); i++)
+    if (account)
     {
-        AttachEvent(item_grp[i].icon);
+        delete account;
+        account = nullptr;
     }
 }
 
-void SystemInfos::onViewDidLoad()
+void SystemInfosModel::GetSportInfo(
+    float* trip,
+    char* time, uint32_t len,
+    float* maxSpd
+)
 {
-
+    HAL::SportStatus_Info_t sport = { 0 };
+    account->Pull("SportStatus", &sport, sizeof(sport));
+    *trip = sport.totalDistance / 1000;
+    DataProc::MakeTimeString(sport.totalTime, time, len);
+    *maxSpd = sport.speedMaxKph;
 }
 
-void SystemInfos::onViewWillAppear()
+void SystemInfosModel::GetGPSInfo(
+    float* lat,
+    float* lng,
+    float* alt,
+    char* utc, uint32_t len,
+    float* course,
+    float* speed
+)
 {
-    Model.SetStatusBarStyle(DataProc::STATUS_BAR_STYLE_BLACK);
-
-    timer = lv_timer_create(onTimerUpdate, 1000, this);
-    lv_timer_ready(timer);
-
-    View.SetScrollToY(_root, -LV_VER_RES, LV_ANIM_OFF);
-    lv_obj_set_style_opa(_root, LV_OPA_TRANSP, 0);
-    lv_obj_fade_in(_root, 300, 0);
-}
-
-void SystemInfos::onViewDidAppear()
-{
-    lv_group_t* group = lv_group_get_default();
-    LV_ASSERT_NULL(group);
-    View.onFocus(group);
-}
-
-void SystemInfos::onViewWillDisappear()
-{
-    lv_obj_fade_out(_root, 300, 0);
-}
-
-void SystemInfos::onViewDidDisappear()
-{
-    lv_timer_del(timer);
-}
-
-void SystemInfos::onViewUnload()
-{
-    View.Delete();
-    Model.Deinit();
-}
-
-void SystemInfos::onViewDidUnload()
-{
-
-}
-
-void SystemInfos::AttachEvent(lv_obj_t* obj)
-{
-    lv_obj_add_event_cb(obj, onEvent, LV_EVENT_ALL, this);
-}
-
-void SystemInfos::Update()
-{
-    char buf[64];
-
-    /* Sport */
-    float trip;
-    float maxSpd;
-    Model.GetSportInfo(&trip, buf, sizeof(buf), &maxSpd);
-    View.SetSport(trip, buf, maxSpd);
-
-    /* GPS */
-    float lat;
-    float lng;
-    float alt;
-    float course;
-    float speed;
-    Model.GetGPSInfo(&lat, &lng, &alt, buf, sizeof(buf), &course, &speed);
-    View.SetGPS(lat, lng, alt, buf, course, speed);
-
-    /* MAG */
-    float dir;
-    int x;
-    int y;
-    int z;
-    Model.GetMAGInfo(&dir, &x, &y, &z);
-    View.SetMAG(dir, x, y, z);
-
-    /* IMU */
-    int steps;
-    Model.GetIMUInfo(&steps, buf, sizeof(buf));
-    View.SetIMU(steps, buf);
-
-    /* RTC */
-    Model.GetRTCInfo(buf, sizeof(buf));
-    View.SetRTC(buf);
-
-    /* Power */
-    int usage;
-    float voltage;
-    Model.GetBatteryInfo(&usage, &voltage, buf, sizeof(buf));
-    View.SetBattery(usage, voltage, buf);
-
-    /* Storage */
-    bool detect;
-    const char* type = "-";
-    Model.GetStorageInfo(&detect, &type, buf, sizeof(buf));
-    View.SetStorage(
-        detect ? "OK" : "ERROR",
-        buf,
-        type,
-        VERSION_FILESYSTEM
+    HAL::GPS_Info_t gps = { 0 };
+    account->Pull("GPS", &gps, sizeof(gps));
+    *lat = (float)gps.latitude;
+    *lng = (float)gps.longitude;
+    *alt = gps.altitude;
+    snprintf(
+        utc, len,
+        "%d-%d-%d\n%02d:%02d:%02d",
+        gps.clock.year,
+        gps.clock.month,
+        gps.clock.day,
+        gps.clock.hour,
+        gps.clock.minute,
+        gps.clock.second
     );
+    *course = gps.course;
+    *speed = gps.speed;
+}
 
-    /* System */
-    DataProc::MakeTimeString(lv_tick_get(), buf, sizeof(buf));
-    View.SetSystem(
-        VERSION_FIRMWARE_NAME " " VERSION_SOFTWARE,
-        VERSION_AUTHOR_NAME,
-        VERSION_LVGL,
-        buf,
-        VERSION_COMPILER,
-        VERSION_BUILD_TIME
+void SystemInfosModel::GetMAGInfo(
+    float* dir,
+    int* x,
+    int* y,
+    int* z
+)
+{
+    HAL::MAG_Info_t mag = { 0 };
+    account->Pull("MAG", &mag, sizeof(mag));
+
+    *x = mag.x;
+    *y = mag.y;
+    *z = mag.z;
+
+    // atan2 returns radians, measured counterclockwise from +X axis
+    float heading = atan2f((float)mag.y, (float)mag.x);
+
+    // Convert to degrees
+    heading *= (180.0f / (float)M_PI);
+
+    // Normalize to 0–360°
+    if (heading < 0) {
+        heading += 360.0f;
+    }
+
+    *dir = heading;
+}
+
+void SystemInfosModel::GetIMUInfo(
+    int* step,
+    char* info, uint32_t len
+)
+{
+    HAL::IMU_Info_t imu = { 0 };
+
+    account->Pull("IMU", &imu, sizeof(imu));
+    *step = imu.steps;
+    snprintf(
+        info,
+        len,
+        "%d\n%d\n%d\n%d\n%d\n%d",
+        imu.ax,
+        imu.ay,
+        imu.az,
+        imu.gx,
+        imu.gy,
+        imu.gz
     );
 }
 
-void SystemInfos::onTimerUpdate(lv_timer_t* timer)
+void SystemInfosModel::GetRTCInfo(
+    char* dateTime, uint32_t len
+)
 {
-    SystemInfos* instance = (SystemInfos*)timer->user_data;
-
-    instance->Update();
+    HAL::Clock_Info_t clock = { 0 };
+    account->Pull("Clock", &clock, sizeof(clock));
+    snprintf(
+        dateTime,
+        len,
+        "%d-%d-%d\n%02d:%02d:%02d",
+        clock.year,
+        clock.month,
+        clock.day,
+        clock.hour,
+        clock.minute,
+        clock.second
+    );
 }
 
-void SystemInfos::onEvent(lv_event_t* event)
+void SystemInfosModel::GetBatteryInfo(
+    int* usage,
+    float* voltage,
+    char* state, uint32_t len
+)
 {
-    SystemInfos* instance = (SystemInfos*)lv_event_get_user_data(event);
-    LV_ASSERT_NULL(instance);
+    HAL::Power_Info_t power = { 0 };
+    account->Pull("Power", &power, sizeof(power));
+    *usage = power.usage;
+    *voltage = power.voltage / 1000.0f;
+    strncpy(state, power.isCharging ? "CHARGE" : "DISCHARGE", len);
+    state[len - 1] = '\0';
+}
 
-    lv_obj_t* obj = lv_event_get_current_target(event);
-    lv_event_code_t code = lv_event_get_code(event);
+void SystemInfosModel::GetStorageInfo(
+    bool* detect,
+    const char** type,
+    char* usage, uint32_t len
+)
+{
+    DataProc::Storage_Basic_Info_t info = { 0 };
+    account->Pull("Storage", &info, sizeof(info));
+    *detect = info.isDetect;
+    *type = info.type;
+    snprintf(
+        usage, len,
+        "%0.1f GB",
+        info.totalSizeMB / 1024.0f
+    );
+}
 
-    if (code == LV_EVENT_PRESSED)
-    {
-        if (lv_obj_has_state(obj, LV_STATE_FOCUSED))
-        {
-            instance->_Manager->Pop();
-        }
-    }
+void SystemInfosModel::SetStatusBarStyle(DataProc::StatusBar_Style_t style)
+{
+    DataProc::StatusBar_Info_t info;
+    DATA_PROC_INIT_STRUCT(info);
 
-    if (obj == instance->_root)
-    {
-        if (code == LV_EVENT_LEAVE)
-        {
-            instance->_Manager->Pop();
-        }
-    }
+    info.cmd = DataProc::STATUS_BAR_CMD_SET_STYLE;
+    info.param.style = style;
+
+    account->Notify("StatusBar", &info, sizeof(info));
 }
