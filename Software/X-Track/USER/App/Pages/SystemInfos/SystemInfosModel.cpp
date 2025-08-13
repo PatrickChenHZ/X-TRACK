@@ -1,5 +1,10 @@
 #include "SystemInfosModel.h"
 #include <stdio.h>
+#include <math.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
 
 using namespace Page;
 
@@ -75,13 +80,24 @@ void SystemInfosModel::GetMAGInfo(
 )
 {
     HAL::MAG_Info_t mag = { 0 };
-
     account->Pull("MAG", &mag, sizeof(mag));
 
-    *dir = 0;
     *x = mag.x;
     *y = mag.y;
     *z = mag.z;
+
+    // atan2 returns radians, measured counterclockwise from +X axis
+    float heading = atan2f((float)mag.y, (float)mag.x);
+
+    // Convert to degrees
+    heading *= (180.0f / (float)M_PI);
+
+    // Normalize to 0–360°
+    if (heading < 0) {
+        heading += 360.0f;
+    }
+
+    *dir = heading;
 }
 
 void SystemInfosModel::GetIMUInfo(
