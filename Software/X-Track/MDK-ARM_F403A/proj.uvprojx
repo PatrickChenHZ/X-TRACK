@@ -3865,6 +3865,11 @@
               <FileType>1</FileType>
               <FilePath>..\Libraries\StackInfo\StackInfo.c</FilePath>
             </File>
+            <File>
+              <FileName>LSM6DS3.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\Libraries\LSM6DS3\LSM6DS3.cpp</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

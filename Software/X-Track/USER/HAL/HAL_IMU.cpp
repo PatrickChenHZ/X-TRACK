@@ -1,7 +1,7 @@
 #include "HAL.h"
-#include "LSM6DSM/LSM6DSM.h"
+#include "LSM6DS3/LSM6DS3.h"
 
-static LSM6DSM imu;
+static LSM6DS3 imu;
 static HAL::CommitFunc_t CommitFunc = nullptr;
 static void* UserData = nullptr;
 

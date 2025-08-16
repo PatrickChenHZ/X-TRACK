@@ -1,4 +1,4 @@
-#include "LSM6DSM.h"
+#include "LSM6DS3.h"
 #include "Wire.h"
 #include <math.h>
 
@@ -140,13 +140,14 @@
 #define GYR_ODR_833_HZ          (0x07 << 4)
 #define GYR_ODR_1_66_KHZ        (0x08 << 4)
 #define GYR_ODR_3_33_KHZ        (0x09 << 4)
-#define GYR_ODR_6_66_KHZ        (0x01 << 4)
+//#define GYR_ODR_6_66_KHZ        (0x01 << 4)
+#define GYR_ODR_6_66_KHZ        (0x0a << 4)
 #define GYR_SCALE_250_DPS       (0x00 << 2)
 #define GYR_SCALE_500_DPS       (0x01 << 2)
 #define GYR_SCALE_1000_DPS      (0x02 << 2)
 #define GYR_SCALE_2000_DPS      (0x03 << 2)
 
-bool LSM6DSM::Init(uint8_t addr)
+bool LSM6DS3::Init(uint8_t addr)
 {
     Address = addr;
 
@@ -156,9 +157,10 @@ bool LSM6DSM::Init(uint8_t addr)
 		SetRegisterBits(CTRL3_C, 0x04, true);   // IF_INC=1
 
     ConfigAcc(ACC_ODR_52_HZ, ACC_SCALE_4_G);
-    ConfigGyr(GYR_POWER_DOWN, GYR_SCALE_500_DPS);
-    //LSM6DSMSetScale(ACC_SCALE_4_G, GYR_SCALE_500_DPS);
-    //LSM6DSMSetODR(ACC_ODR_416_HZ, GYR_POWER_DOWN);
+    //ConfigGyr(GYR_POWER_DOWN, GYR_SCALE_500_DPS);
+		ConfigGyr(GYR_ODR_52_HZ, GYR_SCALE_500_DPS);
+    //LSM6DS3SetScale(ACC_SCALE_4_G, GYR_SCALE_500_DPS);
+    //LSM6DS3SetODR(ACC_ODR_416_HZ, GYR_POWER_DOWN);
     //SetRegisterBits(CTRL3_C, 0x20, true);    //interrupt output pads active low
     //WriteReg(CTRL7_G,     0x04);                  //Source register rounding function enable
     EnableAWT(10, 100);                          //20 degree, 400ms
@@ -168,22 +170,22 @@ bool LSM6DSM::Init(uint8_t addr)
     return IsConnected();
 }
 
-bool LSM6DSM::IsConnected()
+bool LSM6DS3::IsConnected()
 {
-    return (ReadReg(WHO_AM_I) == 0x6A);
+    return (ReadReg(WHO_AM_I) == 0x69);
 }
 
-void LSM6DSM::ConfigAcc(uint8_t acc_odr, uint8_t acc_scale)
+void LSM6DS3::ConfigAcc(uint8_t acc_odr, uint8_t acc_scale)
 {
     WriteReg(CTRL1_XL, acc_odr | acc_scale);
 }
 
-void LSM6DSM::ConfigGyr(uint8_t gyr_odr, uint8_t gyr_scale)
+void LSM6DS3::ConfigGyr(uint8_t gyr_odr, uint8_t gyr_scale)
 {
     WriteReg(CTRL2_G, gyr_odr | gyr_scale);
 }
 
-void LSM6DSM::GetMotion6(
+void LSM6DS3::GetMotion6(
     int16_t* acc_x,
     int16_t* acc_y,
     int16_t* acc_z,
@@ -203,29 +205,29 @@ void LSM6DSM::GetMotion6(
     *acc_z = (buf[11] << 8) | buf[10];
 }
 
-int16_t LSM6DSM::GetTemperature(void)
+int16_t LSM6DS3::GetTemperature(void)
 {
     uint8_t buf[2];
     ReadRegs(OUT_TEMP_L, buf, sizeof(buf));
     return buf[1] << 8 | buf[0];
 }
 
-void LSM6DSM::SoftReset(void)
+void LSM6DS3::SoftReset(void)
 {
     SetRegisterBits(CTRL3_C, 0x01, true);
 }
 
-void LSM6DSM::EnableEMbeddedFunc(void)
+void LSM6DS3::EnableEMbeddedFunc(void)
 {
     SetRegisterBits(CTRL10_C, 0x04, true);     // Enable embedded functions
 }
 
-void LSM6DSM::DisableEMbeddedFunc(void)
+void LSM6DS3::DisableEMbeddedFunc(void)
 {
     SetRegisterBits(CTRL10_C, 0x04, false);     // Disable embedded functions
 }
 
-void LSM6DSM::EnableAWT(int16_t angle, int16_t delay)
+void LSM6DS3::EnableAWT(int16_t angle, int16_t delay)
 {
     int16_t set_delay;
     int16_t set_angle;
@@ -247,13 +249,13 @@ void LSM6DSM::EnableAWT(int16_t angle, int16_t delay)
     SetRegisterBits(DRDY_PULSE_CFG, 0x01, true);   // AWT interrupt driven to INT2 pin
 }
 
-void LSM6DSM::DisableAWT(void)
+void LSM6DS3::DisableAWT(void)
 {
     SetRegisterBits(CTRL10_C, 0x80, false);             // Disable AWT detection (0x80)
     SetRegisterBits(DRDY_PULSE_CFG, 0x01, false);   // AWT interrupt disconnect to INT2 pin
 }
 
-void LSM6DSM::EnableTapDetection(void)
+void LSM6DS3::EnableTapDetection(void)
 {
     SetRegisterBits(TAP_CFG, 0x82, true);      // Enable interrupts(0x80) and tap detection on X-axis(0x08), Y-axis(0x04), Z-axis(0x02)
     SetRegisterBits(TAP_THS_6D, 0x8c, true);   // Set tap threshold(LSB0 - MSB4, dafult value 00000)
@@ -265,12 +267,12 @@ void LSM6DSM::EnableTapDetection(void)
     // (0x08)Double-tap interrupt driven to INT2 pin
 }
 
-void LSM6DSM::DisableTapDetection(void)
+void LSM6DS3::DisableTapDetection(void)
 {
     SetRegisterBits(TAP_CFG, 0x08 | 0x04 | 0x02, false); //tap detection on X-axis(0x08), Y-axis(0x04), Z-axis(0x02)
 }
 
-void LSM6DSM::EnablePedometer(uint16_t debounce_time, uint8_t debounce_step)
+void LSM6DS3::EnablePedometer(uint16_t debounce_time, uint8_t debounce_step)
 {
     WriteReg(FUNC_CFG_ACCESS, 0x80);                            // Enable access to embedded functions registers (bank A)
     WriteReg(CONFIG_PEDO_THS_MIN, 0x8e);                    // PEDO_FS = ¡À4 g and configure pedometer minimum threshold value
@@ -280,7 +282,7 @@ void LSM6DSM::EnablePedometer(uint16_t debounce_time, uint8_t debounce_step)
     //SetRegisterBits(INT1_CTRL, 0x80, true);                  // Step detector interrupt driven to INT1 pin
 }
 
-uint16_t LSM6DSM::GetCurrentStep(void)
+uint16_t LSM6DS3::GetCurrentStep(void)
 {
     uint8_t tempL, tempH;
     tempL = ReadReg(STEP_COUNTER_L);
@@ -288,19 +290,19 @@ uint16_t LSM6DSM::GetCurrentStep(void)
     return ((tempH << 8) | tempL);
 }
 
-void LSM6DSM::ResetStepCounter(void)
+void LSM6DS3::ResetStepCounter(void)
 {
     SetRegisterBits(CTRL10_C, 0x02, true);
     delay(1);
     SetRegisterBits(CTRL10_C, 0x02, false);
 }
 
-void LSM6DSM::DisablePedometer(void)
+void LSM6DS3::DisablePedometer(void)
 {
     SetRegisterBits(CTRL10_C, 0x10, false);                     // Disable pedometer algorithm
 }
 
-void LSM6DSM::WriteReg(uint8_t reg, uint8_t data)
+void LSM6DS3::WriteReg(uint8_t reg, uint8_t data)
 {
     Wire.beginTransmission(Address);
     Wire.write(reg);
@@ -308,34 +310,60 @@ void LSM6DSM::WriteReg(uint8_t reg, uint8_t data)
     Wire.endTransmission();
 }
 
-uint8_t LSM6DSM::ReadReg(uint8_t reg)
+//uint8_t LSM6DS3::ReadReg(uint8_t reg)
+//{
+//    Wire.beginTransmission(Address);
+//    Wire.write(reg);
+//    Wire.endTransmission();
+//
+//    Wire.requestFrom(Address, 1);
+//    uint8_t data = Wire.read();
+//    Wire.endTransmission();
+//
+//    return data;
+//}
+
+//void LSM6DS3::ReadRegs(uint8_t reg, uint8_t* buf, uint16_t len)
+//{
+//    Wire.beginTransmission(Address);
+//    Wire.write(reg);
+//    Wire.endTransmission();
+//
+//    Wire.requestFrom(Address, len);
+//    for(int i = 0; i < len; i++)
+//    {
+//        buf[i] = Wire.read();
+//    }
+//    Wire.endTransmission();
+//}
+
+uint8_t LSM6DS3::ReadReg(uint8_t reg)
 {
-   Wire.beginTransmission(Address);
-   Wire.write(reg);
-   Wire.endTransmission();
-
-   Wire.requestFrom(Address, 1);
-   uint8_t data = Wire.read();
-   Wire.endTransmission();
-
-   return data;
+    Wire.beginTransmission(Address);
+    Wire.write(reg);
+    Wire.endTransmission();                 // STOP
+    uint8_t n = Wire.requestFrom(Address, (uint8_t)1);
+    if (n != 1) { return 0; }               // or handle error
+    return Wire.read();
 }
 
-void LSM6DSM::ReadRegs(uint8_t reg, uint8_t* buf, uint16_t len)
+void LSM6DS3::ReadRegs(uint8_t reg, uint8_t* buf, uint16_t len)
 {
-   Wire.beginTransmission(Address);
-   Wire.write(reg);
-   Wire.endTransmission();
-
-   Wire.requestFrom(Address, len);
-   for(int i = 0; i < len; i++)
-   {
-       buf[i] = Wire.read();
-   }
-   Wire.endTransmission();
+    Wire.beginTransmission(Address);
+    Wire.write(reg);
+    Wire.endTransmission();                  // STOP
+    uint8_t n = Wire.requestFrom(Address, (uint8_t)len);
+    if (n != len) {                          // handle short read
+        // zero-fill
+        for (uint8_t i = 0; i < n; ++i) buf[i] = Wire.read();
+        for (uint16_t i = n; i < len; ++i) buf[i] = 0;
+        return;
+    }
+    for (uint16_t i = 0; i < len; i++) buf[i] = Wire.read();
 }
 
-void LSM6DSM::SetRegisterBits(uint8_t reg, uint8_t data, bool setBits)
+
+void LSM6DS3::SetRegisterBits(uint8_t reg, uint8_t data, bool setBits)
 {
     uint8_t val = ReadReg(reg);
     setBits ? val |= data : val &= ~data;
